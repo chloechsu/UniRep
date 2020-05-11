@@ -159,7 +159,6 @@ def bucketbatchpad(
         pad_shape=([None]),
         repeat=1,
         filt=None
-
 ):
     """
     Streams data from path_to_data that is correctly preprocessed.
@@ -188,9 +187,6 @@ def bucketbatchpad(
         key_func=lambda seq: smart_length(tf_rank1_tensor_len(seq), bucket_bounds=bounds), # choose a bucket
         reduce_func=lambda key, ds: pad_batch(ds, batch_size, padding=padding, padded_shapes=pad_shape), # apply reduce funtion to pad
         window_size=window_size)
-
-
-        
     return grouped_dataset
 
 def shufflebatch(

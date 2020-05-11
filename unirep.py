@@ -713,7 +713,7 @@ class babbler64(babbler256):
         self._initial_state_placeholder = (
                 tuple(tf.placeholder(tf.float32, shape=[None, self._rnn_size]) for _ in range(self._num_layers)),
                 tuple(tf.placeholder(tf.float32, shape=[None, self._rnn_size]) for _ in range(self._num_layers))
-    )
+        )
         self._minibatch_y_placeholder = tf.placeholder(
             tf.int32, shape=[None, None], name="minibatch_y")
         # Batch size dimensional placeholder which gives the
