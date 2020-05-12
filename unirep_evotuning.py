@@ -53,7 +53,7 @@ else:
 # In[3]:
 
 
-batch_size = 12
+batch_size = 256
 b = babbler(batch_size=batch_size, model_path=MODEL_WEIGHT_PATH)
 
 
@@ -68,23 +68,34 @@ b = babbler(batch_size=batch_size, model_path=MODEL_WEIGHT_PATH)
 # In[4]:
 
 
-# Before you can train your model, 
-with open("seqs.txt", "r") as source:
-    with open("formatted.txt", "w") as destination:
+# Load jackhmmer evotune seqs.
+seqlens = []
+with open("evotune_seqs/wide_jackhmmer_3_train.txt", "r") as source:
+    with open("formatted_evotune_jackhmmer_train.txt", "w") as destination:
         for i,seq in enumerate(source):
             seq = seq.strip()
-            if b.is_valid_seq(seq) and len(seq) < 275: 
+            if b.is_valid_seq(seq): 
+                seqlens.append(len(seq))
                 formatted = ",".join(map(str,b.format_seq(seq)))
                 destination.write(formatted)
                 destination.write('\n')
+print('Formatted %d sequences.' % len(seqlens))
 
-
-# This is what the integer format looks like
 
 # In[5]:
 
 
-get_ipython().system('head -n1 formatted.txt')
+import matplotlib.pyplot as plt
+plt.hist(seqlens)
+plt.show()
+
+
+# This is what the integer format looks like
+
+# In[6]:
+
+
+get_ipython().system('head -n1 formatted_evotune_jackhmmer_train.txt')
 
 
 # Notice that by default format_seq does not include the stop symbol (25) at the end of the sequence. This is the correct behavior if you are trying to train a top model, but not if you are training UniRep representations.
@@ -99,17 +110,17 @@ get_ipython().system('head -n1 formatted.txt')
 # - Automatically padding the sequences with zeros so the returned batch is a perfect rectangle
 # - Automatically repeating the dataset
 
-# In[6]:
+# In[7]:
 
 
-bucket_op = b.bucket_batch_pad("formatted.txt", interval=1000) # Large interval
+bucket_op = b.bucket_batch_pad("formatted_evotune_jackhmmer_train.txt", lower=100, upper=500, interval=50)
 
 
 # Inconveniently, this does not make it easy for a value to be associated with each sequence and not lost during shuffling. You can get around this by just prepending every integer sequence with the sequence label (eg, every sequence would be saved to the file as "{brightness value}, 24, 1, 5,..." and then you could just index out the first column after calling the `bucket_op`. Please reach out if you have questions on how to do this.
 
 # Now that we have the `bucket_op`, we can simply `sess.run()` it to get a correctly formatted batch
 
-# In[7]:
+# In[8]:
 
 
 with tf.Session() as sess:
@@ -122,11 +133,11 @@ print(batch.shape)
 
 # You can look back and see that the batch_size we passed to __init__ is indeed 12, and the second dimension must be the longest sequence included in this batch. Now we have the data flow setup (note that as long as your batch looks like this, you don't need my flow), so we can proceed to implementing the graph. The module returns all the operations needed to feed in sequence and get out trainable representations.
 
-# ## Training a top model and a top model + mLSTM.
+# ## Training the LSTM with evotuning sequences
 
 # First, obtain all of the ops needed to output a representation
 
-# In[8]:
+# In[9]:
 
 
 final_hidden, x_placeholder, batch_size_placeholder, seq_length_placeholder, initial_state_placeholder = (
@@ -145,7 +156,7 @@ logits, seqloss, x_placeholder, y_placeholder, batch_size_placeholder, initial_s
 # 
 # 3.  Minimizing the loss inside of a TensorFlow session
 
-# In[9]:
+# In[10]:
 
 
 learning_rate=.001
@@ -155,7 +166,7 @@ tuning_op = optimizer.minimize(seqloss)
 
 # We next need to define a function that allows us to calculate the length each sequence in the batch so that we know what index to use to obtain the right "final" hidden state
 
-# In[10]:
+# In[11]:
 
 
 def nonpad_len(batch):
@@ -163,15 +174,13 @@ def nonpad_len(batch):
     lengths = np.sum(nonzero, axis=1)
     return lengths
 
-nonpad_len(batch)
-
 
 # We are ready to train. As an illustration, let's learn to predict the number 42 just optimizing the top model.
 
-# In[14]:
+# In[ ]:
 
 
-num_iters = 100
+num_iters = 50
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
     for i in range(num_iters):
@@ -183,12 +192,11 @@ with tf.Session() as sess:
                      batch_size_placeholder: batch_size,
                      initial_state_placeholder:b._zero_state
                 }
-        )
-                  
+        )         
         print("Iteration {0}: {1}".format(i, loss_))
+    if i % 10 == 0:
+        b.dump_weights(sess, dir_name="./64_evotuned_weights")
 
-
-# We can also jointly train the top model and the mLSTM. Note that if using the 1900-unit (full) model, you will need a GPU with at least 16GB RAM. To see a demonstration of joint training with fewer computational resources, please run this notebook using the 64-unit model.
 
 # In[ ]:
 
